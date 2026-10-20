@@ -1,0 +1,5 @@
+data/**
+cover_cache/**
+
+*.csv
+*.zip
