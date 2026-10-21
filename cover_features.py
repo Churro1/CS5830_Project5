@@ -116,65 +116,6 @@ def analyze(img, k=6, n_colors=3, merge_de=12.0):
         else:
             out[f"color{n+1}_hex"], out[f"color{n+1}_pct"] = "", 0.0
 
-    # ---- gradients (used for text guess and detail)
-    gx = ndimage.sobel(gray, axis=1) / 8.0
-    gy = ndimage.sobel(gray, axis=0) / 8.0
-    mag = np.hypot(gx, gy)
-
-    # ---- text color guess: among non-background clusters, prefer ones that are
-    # small, sit right next to strong edges (text is thin), and contrast with bg.
-    bg = merged[0][0]
-    near_edge = ndimage.binary_dilation(mag > 0.08, iterations=1).reshape(-1)
-    best, best_score = None, 0.0
-    for i in range(k):
-        if not (0.005 <= frac[i] <= 0.30):
-            continue
-        de = np.linalg.norm(centers[i] - bg)
-        if de < 20:
-            continue
-        edge_adj = near_edge[labels == i].mean()
-        score = edge_adj * min(de / 80.0, 1.0)
-        if score > best_score:
-            best, best_score = i, score
-    out["text_color_hex"] = lab_to_hex(centers[best]) if best is not None else ""
-    out["text_color_conf"] = round(float(best_score), 3)
-
-    # ---- contrast
-    out["contrast_rms"] = round(float(gray.std()), 4)
-    lin = color.rgb2xyz(rgb)[..., 1]  # relative luminance Y
-    lo, hi = np.percentile(lin, [5, 95])
-    out["contrast_wcag_p5_p95"] = round(float((hi + 0.05) / (lo + 0.05)), 3)
-    out["contrast_top2_deltaE"] = (
-        round(float(np.linalg.norm(merged[0][0] - merged[1][0])), 2)
-        if len(merged) > 1 else 0.0
-    )
-
-    # ---- detail / frequency
-    out["edge_density"] = round(float((mag > 0.08).mean()), 4)
-    out["mean_gradient"] = round(float(mag.mean()), 4)
-
-    win = np.outer(np.hanning(h), np.hanning(w))
-    spec = np.abs(np.fft.fft2((gray - gray.mean()) * win)) ** 2
-    fy = np.fft.fftfreq(h)[:, None]
-    fx = np.fft.fftfreq(w)[None, :]
-    r = np.hypot(fx, fy)
-    total = spec.sum() + 1e-12
-    out["hf_energy_ratio"] = round(float(spec[r > 0.15].sum() / total), 4)
-
-    q = (rgb * 15).astype(int)
-    keys = q[..., 0] * 256 + q[..., 1] * 16 + q[..., 2]
-    _, cnt = np.unique(keys, return_counts=True)
-    p = cnt / cnt.sum()
-    out["color_entropy"] = round(float(-(p * np.log2(p)).sum()), 3)
-
-    # ---- general color stats
-    hsv = color.rgb2hsv(rgb)
-    out["mean_lightness"] = round(float(L.mean() / 100), 4)
-    out["mean_saturation"] = round(float(hsv[..., 1].mean()), 4)
-    rg = rgb[..., 0] - rgb[..., 1]
-    yb = 0.5 * (rgb[..., 0] + rgb[..., 1]) - rgb[..., 2]
-    out["colorfulness"] = round(float(
-        np.hypot(rg.std(), yb.std()) + 0.3 * np.hypot(rg.mean(), yb.mean())), 4)
     return out
 
 
@@ -243,11 +184,7 @@ def main():
             if writer is None:
                 # fixed column order, even if the first row is an error
                 fields = ["isbn", "error", "color1_hex", "color1_pct", "color2_hex",
-                          "color2_pct", "color3_hex", "color3_pct", "text_color_hex",
-                          "text_color_conf", "contrast_rms", "contrast_wcag_p5_p95",
-                          "contrast_top2_deltaE", "edge_density", "mean_gradient",
-                          "hf_energy_ratio", "color_entropy", "mean_lightness",
-                          "mean_saturation", "colorfulness"]
+                          "color2_pct", "color3_hex", "color3_pct"]
                 writer = csv.DictWriter(f, fields, restval="")
                 if need_header:
                     writer.writeheader()
